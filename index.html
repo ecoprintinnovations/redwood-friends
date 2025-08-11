@@ -18,17 +18,13 @@
     .btn { background:#3fbf7f; color:#082014; border:none; padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer; }
     .btn.secondary { background: transparent; color:#c9f7d8; border:1px solid rgba(255,255,255,.18);}    
   </style>
-  <!-- Phaser 3 via CDN -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.0/dist/phaser.min.js"></script>
 </head>
 <body>
   <div id="game"></div>
-  <div class="hud">
-    <div id="badges"></div>
-  </div>
+  <div class="hud"><div id="badges"></div></div>
   <div class="hint">Move: WASD / Arrow Keys · Jump: Space (double after Tiko) · Interact: E</div>
 
-  <!-- Overlays for mini-challenges -->
   <div class="overlay" id="overlay">
     <div class="card">
       <h2 id="ov-title">Challenge</h2>
@@ -68,310 +64,266 @@
       ovClose.addEventListener('click', closeHandler);
     }
 
-    // Phaser game
+    //========================
+    // Boot scene: build textures once
+    //========================
+    class BootScene extends Phaser.Scene {
+      constructor(){ super('Boot'); }
+      preload(){
+        // Helper to generate textures reliably
+        this.makeTex = (key, w, h, draw) => { const g = this.add.graphics(); draw(g, w, h); g.generateTexture(key, w, h); g.destroy(); };
+
+        // Blocks
+        const block = (key, base)=> this.makeTex(key,160,24,(g,w,h)=>{ g.fillStyle(base,1); g.fillRoundedRect(0,0,w,h,6); g.lineStyle(1,0xFFFFFF,0.22); for(let x=-h;x<w;x+=10){ g.lineBetween(x,h,x+h,0);} g.fillStyle(0xFFFFFF,0.22); g.fillRoundedRect(0,0,w,6,6); });
+        block('blockPink',0xF5A3C7); block('blockGreen',0x77D09C); block('blockBlue',0x7EC1FF);
+
+        // Other bits
+        this.makeTex('moss',160,10,(g,w,h)=>{g.fillStyle(0x2c6c44,1);g.fillRoundedRect(0,0,w,h,6)});
+        this.makeTex('water',1024,60,(g,w,h)=>{g.fillStyle(0x205a7a,1);g.fillRect(0,0,w,h)});
+        this.makeTex('log',120,22,(g,w,h)=>{g.fillStyle(0x7b4a2b,1);g.fillRoundedRect(0,0,w,h,6)});
+        this.makeTex('rock',70,18,(g,w,h)=>{g.fillStyle(0x7f8b9b,1);g.fillRoundedRect(0,0,w,h,6)});
+        this.makeTex('mushroom',52,32,(g)=>{g.fillStyle(0xb43a53,1);g.fillEllipse(26,12,44,20);g.fillStyle(0xf2eada,1);g.fillRoundedRect(14,18,24,10,4)});
+
+        // Player & item
+        this.makeTex('player',28,34,(g)=>{g.fillStyle(0xF6C8C8,1);g.fillRoundedRect(0,0,28,34,8);g.lineStyle(2,0xffffff,0.2);g.strokeRoundedRect(1,1,26,32,8)});
+        this.makeTex('collect',16,16,(g)=>{g.fillStyle(0xFFD05A,1);g.fillCircle(8,8,8)});
+
+        // Friends
+        this.makeTex('friendBlueJay',54,40,(g)=>{ g.fillStyle(0x2c79ff,1); g.fillEllipse(26,20,36,28); g.fillStyle(0x1a59c8,1); g.fillTriangle(16,8, 26,2, 36,8); g.fillStyle(0x000000,1); g.fillTriangle(40,18, 52,20, 40,22); g.fillStyle(0x9dd0ff,1); g.fillEllipse(22,22,18,12); g.fillStyle(0xffffff,1); g.fillCircle(20,16,3); g.fillStyle(0x000000,1); g.fillCircle(20,16,1.5); });
+        this.makeTex('friendFrog',50,40,(g)=>{ g.fillStyle(0x49c06a,1); g.fillEllipse(24,22,40,24); g.fillStyle(0x3aa65a,1); g.fillEllipse(24,28,30,12); g.fillStyle(0xffffff,1); g.fillCircle(14,14,4); g.fillCircle(34,14,4); g.fillStyle(0x000000,1); g.fillCircle(14,14,2); g.fillCircle(34,14,2); });
+        this.makeTex('friendFox',56,40,(g)=>{ g.fillStyle(0xf08c2e,1); g.fillEllipse(26,22,36,26); g.fillTriangle(16,6, 22,2, 20,12); g.fillTriangle(30,6, 36,2, 32,12); g.fillStyle(0xffd7b3,1); g.fillEllipse(26,24,20,16); g.fillStyle(0xf08c2e,1); g.fillEllipse(44,26,18,12); g.fillStyle(0xffffff,1); g.fillEllipse(48,26,10,8); g.fillStyle(0x000000,1); g.fillCircle(22,20,1.5); g.fillCircle(30,20,1.5); });
+        this.makeTex('friendCrab',56,40,(g)=>{ g.fillStyle(0xee4455,1); g.fillEllipse(26,24,34,18); g.fillTriangle(10,18, 2,10, 6,22); g.fillTriangle(42,18, 50,10, 46,22); g.lineStyle(2,0xee4455,1); for(let i=0;i<3;i++){ g.lineBetween(14+i*6,32, 12+i*6,38); g.lineBetween(28+i*6,32, 26+i*6,38); } g.fillStyle(0xffffff,1); g.fillCircle(18,16,2.5); g.fillCircle(34,16,2.5); g.fillStyle(0x000000,1); g.fillCircle(18,16,1); g.fillCircle(34,16,1); });
+        this.makeTex('lilypad',110,20,(g,w,h)=>{ g.fillStyle(0x60c08a,1); g.fillRoundedRect(0,0,w,h,10); g.lineStyle(2,0x3f8c66,0.6); g.strokeRoundedRect(1,1,w-2,h-2,10); });
+      }
+      create(){ this.scene.start('LevelOne'); }
+    }
+
+    // Shared background painter
+    function paintForest(scene){
+      const w = scene.scale.width; const h = scene.scale.height;
+      const bg = scene.add.graphics(); bg.fillStyle(0x17331f,1).fillRect(0,0,w,h);
+      const trunks = scene.add.graphics().fillStyle(0x3b2516,.9);
+      for(let i=0;i<8;i++){ const x = i*(w/7)+Phaser.Math.Between(-20,20); trunks.fillRect(x,120,24,h); }
+      const canopy = scene.add.graphics().fillStyle(0x245d37,1);
+      for(let i=0;i<9;i++){ const x = i*(w/8)+Phaser.Math.Between(-10,10); canopy.fillEllipse(x,110,220,90); }
+    }
+
+    //========================
+    // Level One
+    //========================
+    class LevelOne extends Phaser.Scene {
+      constructor(){ super('LevelOne'); }
+      create(){
+        paintForest(this);
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+        this.input.keyboard.addKeys('W,A,S,D');
+
+        // Platforms
+        this.platforms = this.physics.add.staticGroup();
+        this.platforms.create(512,560,'blockPink').setScale(6.4,1.2).refreshBody();
+        this.add.image(512,534,'moss').setScale(6.4,1);
+        const layout = [
+          {x:180,y:505,key:'blockGreen'}, {x:330,y:475,key:'blockBlue'}, {x:480,y:448,key:'blockPink'},
+          {x:620,y:423,key:'blockGreen'}, {x:780,y:398,key:'blockBlue'},
+          {x:220,y:330,key:'blockPink'}, {x:380,y:300,key:'blockGreen'}, {x:560,y:270,key:'blockBlue'}
+        ];
+        layout.forEach(p=>this.platforms.create(p.x,p.y,p.key).refreshBody());
+        this.add.image(770,540,'water').setOrigin(.5,1);
+        this.add.image(220,540,'water').setOrigin(.5,1);
+
+        // Player
+        this.player = this.physics.add.sprite(120,520,'player');
+        this.player.setCollideWorldBounds(true);
+        this.player.body.setSize(20,30).setOffset(4,4);
+        this.physics.add.collider(this.player,this.platforms);
+
+        // Jump helpers
+        this.canDoubleJump = false; this.jumps = 0;
+        this.lastOnGroundTime = 0; this.jumpPressedTime = -9999;
+        this.input.keyboard.on('keydown-SPACE',()=>{ this.jumpPressedTime = this.time.now; this.tryJump(); });
+
+        // Mushroom boost
+        const mushroom = this.physics.add.staticImage(445,500,'mushroom');
+        this.physics.add.overlap(this.player,mushroom,()=>{
+          if(Phaser.Input.Keyboard.DownDuration(this.input.keyboard.addKey('SPACE'),200)) this.player.setVelocityY(-560);
+        });
+
+        // Friends
+        this.friends = this.physics.add.staticGroup();
+        const blueJay = this.friends.create(560,238,'friendBlueJay').setData('id','tiko');
+        blueJay.setData('title','Tiko the Blue Jay');
+        blueJay.setData('text','Find three flute pieces. Reward: double jump and a new area.');
+        const frog = this.friends.create(900,368,'friendFrog').setData('id','mossy');
+        frog.setData('title','Mossy the Frog'); frog.setData('text','Cross the wobbly lily pads without falling in.');
+        const fox = this.friends.create(380,270,'friendFox').setData('id','amber');
+        fox.setData('title','Amber the Fox'); fox.setData('text','Help gather berries for the garden.');
+        const crab = this.friends.create(180,488,'friendCrab').setData('id','pinch');
+        crab.setData('title','Pinch the Crab'); crab.setData('text','Hop across river rocks to reach the shell.');
+
+        this.physics.add.overlap(this.player,this.friends,(pl,fr)=>{
+          if(Phaser.Input.Keyboard.JustDown(this.keyE)) this.startFriendChallenge(fr);
+          else this.showFloatingText(fr.x, fr.y-34, 'Press E to help');
+        });
+
+        // Groups
+        this.collectibles = this.physics.add.group();
+        this.movingPads = this.physics.add.group({ allowGravity:false, immovable:true });
+        this.gardenRocks = this.physics.add.group({ allowGravity:false, immovable:true });
+      }
+
+      tryJump(){
+        const onGround = this.player.body.blocked.down;
+        if(onGround) this.lastOnGroundTime = this.time.now;
+        const canGroundJump = onGround || (this.time.now - this.lastOnGroundTime) < 120;
+        const buffered = (this.time.now - this.jumpPressedTime) < 140;
+        if(canGroundJump && buffered){ this.player.setVelocityY(-520); this.jumps = 1; return; }
+        if(!onGround && this.canDoubleJump && this.jumps < 2 && buffered){ this.player.setVelocityY(-460); this.jumps++; return; }
+      }
+
+      update(){
+        const left = this.cursors.left.isDown || this.input.keyboard.addKey('A').isDown;
+        const right = this.cursors.right.isDown || this.input.keyboard.addKey('D').isDown;
+        const onFloor = this.player.body.blocked.down;
+        if(left) this.player.setVelocityX(-225); else if(right) this.player.setVelocityX(225); else this.player.setVelocityX(0);
+        if(onFloor){ this.jumps = 0; this.lastOnGroundTime = this.time.now; }
+        this.movingPads.children.iterate(p=>{ if(!p) return; p.x += p.getData('dx')||0; if(p.x < p.getData('minX') || p.x > p.getData('maxX')) p.setData('dx', -(p.getData('dx'))); });
+        this.gardenRocks.children.iterate(r=>{ if(!r) return; r.y += Math.sin(performance.now()/400 + r.x)*0.05; });
+      }
+
+      showFloatingText(x,y,text){ const t=this.add.text(x,y,text,{fontFamily:'system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif',fontSize:12,color:'#fff'}).setOrigin(.5,1); this.tweens.add({targets:t,y:y-16,alpha:0,duration:800,onComplete:()=>t.destroy()}); }
+
+      startFriendChallenge(friend){
+        const id = friend.getData('id');
+        if(id==='tiko') return this.startCollectChallenge(friend);
+        if(id==='mossy') return this.startLilyPadChallenge(friend);
+        if(id==='amber') return this.startBerryChallenge(friend);
+        if(id==='pinch') return this.startCrabRocksChallenge(friend);
+      }
+
+      // Tiko: collect 3 items, then go to LevelTwo
+      startCollectChallenge(friend){
+        showOverlay(friend.getData('title'), friend.getData('text'), () => {
+          this.collectibles.clear(true,true); this.movingPads.clear(true,true); this.gardenRocks.clear(true,true);
+          const spots = [[560,194],[380,256],[220,286]];
+          spots.forEach(([x,y])=>{ const it=this.collectibles.create(x,y,'collect'); it.body.setAllowGravity(false); it.setData('type','flute'); });
+          const pickup = (pl,it)=>{ it.destroy(); const left=this.collectibles.countActive(); this.showFloatingText(it.x,it.y-10,left+" left"); if(left===0){ this.physics.world.removeCollider(collider); addBadge('Tiko – Music Buddy'); this.canDoubleJump = true; showOverlay('Tiko is your friend!','Double jump unlocked. Heading deeper into the forest...', ()=>{ this.scene.start('LevelTwo'); }); } };
+          const collider = this.physics.add.overlap(this.player,this.collectibles,pickup,null,this);
+        });
+      }
+
+      startLilyPadChallenge(friend){
+        showOverlay(friend.getData('title'), friend.getData('text'), () => {
+          this.collectibles.clear(true,true); this.movingPads.clear(true,true); this.gardenRocks.clear(true,true);
+          const pads=[[700,500,640,760],[820,480,760,880],[940,460,900,990],[1060,440,1020,1100]];
+          pads.forEach(([x,y,minX,maxX],i)=>{ const p=this.movingPads.create(x,y,'lilypad').setImmovable(true); p.setData('dx', i%2===0?-1.05:1.05); p.setData('minX',minX); p.setData('maxX',maxX); p.body.setAllowGravity(false); });
+          const goal=this.physics.add.staticImage(1160,420,'log');
+          const padCol=this.physics.add.collider(this.player,this.movingPads);
+          const goalOv=this.physics.add.overlap(this.player,goal,()=>{ this.physics.world.removeCollider(padCol); this.physics.world.removeCollider(goalOv); addBadge('Mossy – Pond Pal'); showOverlay('Mossy is your friend!','Lovely jumps. The pond party is on!',null); });
+          this.time.addEvent({delay:200,loop:true,callback:()=>{ if(this.player.y>560){ this.player.setPosition(680,320); this.player.setVelocity(0,0);} }});
+          this.player.setPosition(680,320);
+        });
+      }
+
+      startBerryChallenge(friend){
+        showOverlay(friend.getData('title'), friend.getData('text'), () => {
+          this.collectibles.clear(true,true); this.movingPads.clear(true,true); this.gardenRocks.clear(true,true);
+          const spots=[[330,435],[480,408],[620,383]]; spots.forEach(([x,y])=>{ const b=this.collectibles.create(x,y,'collect'); b.body.setAllowGravity(false); });
+          const pickup=(pl,it)=>{ it.destroy(); const left=this.collectibles.countActive(); this.showFloatingText(it.x,it.y-10,left+" left"); if(left===0){ this.physics.world.removeCollider(col); addBadge('Amber – Garden Helper'); showOverlay('Amber is your friend!','Berries gathered. The garden will thrive!',null);} };
+          const col=this.physics.add.overlap(this.player,this.collectibles,pickup,null,this);
+          this.player.setPosition(300,520);
+        });
+      }
+
+      startCrabRocksChallenge(friend){
+        showOverlay(friend.getData('title'), friend.getData('text'), () => {
+          this.collectibles.clear(true,true); this.movingPads.clear(true,true); this.gardenRocks.clear(true,true);
+          const rocks=[[140,520],[200,502],[260,488],[320,476],[380,466]]; rocks.forEach(([x,y])=>{ const r=this.gardenRocks.create(x,y,'rock'); r.body.setAllowGravity(false); r.setImmovable(true); });
+          const shell=this.physics.add.staticImage(430,452,'log');
+          const rockCol=this.physics.add.collider(this.player,this.gardenRocks);
+          const shellOv=this.physics.add.overlap(this.player,shell,()=>{ this.physics.world.removeCollider(rockCol); this.physics.world.removeCollider(shellOv); addBadge('Pinch – River Buddy'); showOverlay('Pinch is your friend!','You made it over the rocks to the shiny shell!',null); });
+          this.time.addEvent({delay:200,loop:true,callback:()=>{ if(this.player.y>560){ this.player.setPosition(120,520); this.player.setVelocity(0,0);} }});
+          this.player.setPosition(120,520);
+        });
+      }
+    }
+
+    //========================
+    // Level Two (new area after Tiko)
+    //========================
+    class LevelTwo extends Phaser.Scene {
+      constructor(){ super('LevelTwo'); }
+      create(){
+        paintForest(this);
+        this.cursors = this.input.keyboard.createCursorKeys();
+        this.input.keyboard.addKeys('W,A,S,D');
+
+        // Different layout: higher canopy and a little rope-bridge feel
+        this.platforms = this.physics.add.staticGroup();
+        this.platforms.create(512,560,'blockBlue').setScale(6.4,1.2).refreshBody();
+        this.add.image(512,534,'moss').setScale(6.4,1);
+        const layout=[
+          {x:240,y:460,key:'blockPink'},{x:420,y:420,key:'blockGreen'},{x:600,y:390,key:'blockBlue'},
+          {x:780,y:360,key:'blockPink'},{x:900,y:320,key:'blockGreen'},
+          {x:340,y:260,key:'blockBlue'},{x:540,y:240,key:'blockPink'},{x:740,y:220,key:'blockGreen'}
+        ];
+        layout.forEach(p=>this.platforms.create(p.x,p.y,p.key).refreshBody());
+
+        // Player spawns here with double jump already unlocked
+        this.player = this.physics.add.sprite(120,520,'player');
+        this.player.setCollideWorldBounds(true);
+        this.player.body.setSize(20,30).setOffset(4,4);
+        this.physics.add.collider(this.player,this.platforms);
+
+        // Double jump always enabled here
+        this.canDoubleJump = true; this.jumps = 0; this.lastOnGroundTime=0; this.jumpPressedTime=-9999;
+        this.input.keyboard.on('keydown-SPACE',()=>{ this.jumpPressedTime = this.time.now; this.tryJump(); });
+
+        // A simple friend checkpoint in Level Two
+        this.friends = this.physics.add.staticGroup();
+        const moth = this.friends.create(540,210,'friendBlueJay').setTint(0xddddee).clearTint();
+        moth.setData('title','Puff the Moth');
+        moth.setData('text','Light three lanterns to brighten the tunnels.');
+        this.physics.add.overlap(this.player,this.friends,()=>{
+          this.add.text(512,80,'Level Two – Work in progress', {fontSize:'16px', color:'#fff'}).setOrigin(.5,0);
+        });
+
+        // Basic controls
+        this.movingPads = this.physics.add.group({ allowGravity:false, immovable:true });
+      }
+
+      tryJump(){
+        const onGround = this.player.body.blocked.down;
+        if(onGround) this.lastOnGroundTime = this.time.now;
+        const canGroundJump = onGround || (this.time.now - this.lastOnGroundTime) < 120;
+        const buffered = (this.time.now - this.jumpPressedTime) < 140;
+        if(canGroundJump && buffered){ this.player.setVelocityY(-520); this.jumps = 1; return; }
+        if(!onGround && this.canDoubleJump && this.jumps < 2 && buffered){ this.player.setVelocityY(-460); this.jumps++; return; }
+      }
+
+      update(){
+        const left = this.cursors.left.isDown || this.input.keyboard.addKey('A').isDown;
+        const right = this.cursors.right.isDown || this.input.keyboard.addKey('D').isDown;
+        const onFloor = this.player.body.blocked.down;
+        if(left) this.player.setVelocityX(-225); else if(right) this.player.setVelocityX(225); else this.player.setVelocityX(0);
+        if(onFloor){ this.jumps = 0; this.lastOnGroundTime = this.time.now; }
+      }
+    }
+
+    //========================
+    // Game config (multi-scene)
+    //========================
     const config = {
       type: Phaser.AUTO,
       parent: 'game',
       width: 1024,
       height: 576,
       backgroundColor: '#1a3321',
-      physics: { default: 'arcade', arcade: { gravity: { y: 980 }, debug: false }}, // tuned gravity
+      physics: { default: 'arcade', arcade: { gravity: { y: 980 }, debug: false }},
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-      scene: { preload, create, update }
+      scene: [BootScene, LevelOne, LevelTwo]
     };
-
-    const game = new Phaser.Game(config);
-
-    let cursors, keyE;
-    let player;
-    let platforms;
-    let friends;
-    let collectibles;
-    let movingPads;
-    let gardenRocks;
-    let canDoubleJump = false;
-    let jumps = 0;
-
-    // Jump assistance ("coyote time" and a short jump buffer)
-    let lastOnGroundTime = 0;
-    let jumpPressedTime = -9999;
-    const COYOTE_MS = 120;
-    const BUFFER_MS = 140;
-
-    function preload(){
-      // Utility to draw and generate textures
-      const drawTex = (key, draw) => { const g = this.add.graphics(); draw(g); g.generateTexture(key); g.destroy(); };
-
-      // Pretty blocks (pink/green/blue) with light hatch
-      const makeBlock = (key, w, h, base, accent) => drawTex(key, g => {
-        g.clear(); g.fillStyle(base,1); g.fillRoundedRect(0,0,w,h,6);
-        g.lineStyle(1, accent, 0.22);
-        for(let x=-h; x<w; x+=10){ g.lineBetween(x, h, x+h, 0); }
-        g.fillStyle(accent, 0.22); g.fillRoundedRect(0,0,w,6,6);
-      });
-      makeBlock('blockPink', 160, 24, 0xF5A3C7, 0xFFFFFF);
-      makeBlock('blockGreen',160, 24, 0x77D09C, 0xFFFFFF);
-      makeBlock('blockBlue', 160, 24, 0x7EC1FF, 0xFFFFFF);
-
-      // Moss strip, water, log, rock
-      drawTex('moss', g => { g.fillStyle(0x2c6c44,1); g.fillRoundedRect(0,0,160,10,6); });
-      drawTex('water', g => { g.fillStyle(0x205a7a,1); g.fillRect(0,0,1024,60); });
-      drawTex('log', g => { g.fillStyle(0x7b4a2b,1); g.fillRoundedRect(0,0,120,22,6); });
-      drawTex('rock', g => { g.fillStyle(0x7f8b9b,1); g.fillRoundedRect(0,0,70,18,6); });
-      drawTex('mushroom', g => { g.fillStyle(0xb43a53,1); g.fillEllipse(0+22,0+12,44,20); g.fillStyle(0xf2eada,1); g.fillRoundedRect(10,18,24,10,4); });
-
-      // Player
-      drawTex('player', g => { g.fillStyle(0xF6C8C8,1); g.fillRoundedRect(0,0,28,34,8); g.lineStyle(2,0xffffff,0.2); g.strokeRoundedRect(1,1,26,32,8); });
-      drawTex('collect', g => { g.fillStyle(0xFFD05A,1); g.fillCircle(8,8,8); });
-
-      // Friends with more natural shapes (procedural "illustrated" look)
-      // Blue Jay (body + crest + beak + wing)
-      drawTex('friendBlueJay', g => {
-        g.fillStyle(0x2c79ff,1); g.fillEllipse(26,20,36,28); // body
-        g.fillStyle(0x1a59c8,1); g.........................................illTriangle(40,18, 52,20, 40,22); // beak
-        g.fillStyle(0x9dd0ff,1); g.fillEllipse(22,22,18,12); // wing
-        g.fillStyle(0xffffff,1); g.fillCircle(20,16,3); g.fillStyle(0x000000,1); g.fillCircle(20,16,1.5);
-      });
-      // Frog (body + eyes)
-      drawTex('friendFrog', g => {
-        g.fillStyle(0x49c06a,1); g.fillEllipse(24,22,40,24); // body
-        g.fillStyle(0x3aa65a,1); g.fillEllipse(24,28,30,12); // belly shade
-        g.fillStyle(0xffffff,1); g.fillCircle(14,14,4); g.fillCircle(34,14,4);
-        g.fillStyle(0x000000,1); g.fillCircle(14,14,2); g.fillCircle(34,14,2);
-      });
-      // Fox (body + ears + tail + face)
-      drawTex('friendFox', g => {
-        g.fillStyle(0xf08c2e,1); g.fillEllipse(26,22,36,26); // body
-        g.fillTriangle(16,6, 22,2, 20,12); g.fillTriangle(30,6, 36,2, 32,12); // ears
-        g.fillStyle(0xffd7b3,1); g.fillEllipse(26,24,20,16); // face/cheeks
-        g.fillStyle(0xf08c2e,1); g.fillEllipse(44,26,18,12); // tail
-        g.fillStyle(0xffffff,1); g.fillEllipse(48,26,10,8); // tail tip
-        g.fillStyle(0x000000,1); g.fillCircle(22,20,1.5); g.fillCircle(30,20,1.5);
-      });
-      // Crab (body + claws + legs)
-      drawTex('friendCrab', g => {
-        g.fillStyle(0xee4455,1); g.fillEllipse(26,24,34,18); // body
-        g.fillStyle(0xee4455,1); g.fillTriangle(10,18, 2,10, 6,22); g.fillTriangle(42,18, 50,10, 46,22); // claws
-        g.lineStyle(2,0xee4455,1);
-        for(let i=0;i<3;i++){ g.lineBetween(14+i*6,32, 12+i*6,38); g.lineBetween(28+i*6,32, 26+i*6,38); }
-        g.fillStyle(0xffffff,1); g.fillCircle(18,16,2.5); g.fillCircle(34,16,2.5);
-        g.fillStyle(0x000000,1); g.fillCircle(18,16,1); g.fillCircle(34,16,1);
-      });
-
-      // Lilypad
-      drawTex('lilypad', g => { g.fillStyle(0x60c08a,1); g.fillRoundedRect(0,0,110,20,10); g.lineStyle(2,0x3f8c66,0.6); g.strokeRoundedRect(1,1,108,18,10); });
-    }
-
-    function makeTreeBackground(scene){
-      const w = scene.scale.width; const h = scene.scale.height;
-      const bg = scene.add.graphics();
-      bg.fillStyle(0x17331f,1); bg.fillRect(0,0,w,h);
-      // trunks
-      const trunks = scene.add.graphics(); trunks.fillStyle(0x3b2516,.9);
-      for(let i=0;i<8;i++){
-        const x = i * (w/7) + Phaser.Math.Between(-20,20);
-        trunks.fillRect(x, 120, 24, h);
-      }
-      const canopy = scene.add.graphics(); canopy.fillStyle(0x245d37,1);
-      for(let i=0;i<9;i++){
-        const x = i * (w/8) + Phaser.Math.Between(-10,10);
-        canopy.fillEllipse(x, 110, 220, 90);
-      }
-    }
-
-    function create(){
-      makeTreeBackground(this);
-
-      // Static platforms (revised: easier first climb + reachable second level)
-      platforms = this.physics.add.staticGroup();
-      // ground
-      platforms.create(512, 560, 'blockPink').setScale(6.4, 1.2).refreshBody();
-      this.add.image(512, 534, 'moss').setScale(6.4,1);
-
-      // step-up path to canopy (lowered by ~20px overall)
-      const layout = [
-        {x: 180, y: 505, key:'blockGreen'},
-        {x: 330, y: 475, key:'blockBlue'},
-        {x: 480, y: 448, key:'blockPink'},
-        {x: 620, y: 423, key:'blockGreen'},
-        {x: 780, y: 398, key:'blockBlue'},
-        // canopy row now slightly lower to guarantee reach
-        {x: 220, y: 330, key:'blockPink'},
-        {x: 380, y: 300, key:'blockGreen'},
-        {x: 560, y: 270, key:'blockBlue'}
-      ];
-      layout.forEach(p => platforms.create(p.x, p.y, p.key).refreshBody());
-
-      // helper mushroom spring near the tricky step (press jump on it to boost)
-      const mushroom = this.physics.add.staticImage(445, 500, 'mushroom');
-
-      // ponds
-      this.add.image(770, 540, 'water').setOrigin(.5,1);
-      this.add.image(220, 540, 'water').setOrigin(.5,1);
-
-      // Player
-      player = this.physics.add.sprite(120, 520, 'player');
-      player.setCollideWorldBounds(true);
-      player.body.setSize(20, 30).setOffset(4,4);
-      this.physics.add.collider(player, platforms);
-
-      // Mushroom bounce
-      this.physics.add.overlap(player, mushroom, () => {
-        if(Phaser.Input.Keyboard.DownDuration(this.input.keyboard.addKey('SPACE'), 200)){
-          player.setVelocityY(-560); // strong pop
-        }
-      });
-
-      // Controls
-      cursors = this.input.keyboard.createCursorKeys();
-      keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-      this.input.keyboard.addKeys('W,A,S,D');
-
-      // Friends (now with illustrated sprites)
-      friends = this.physics.add.staticGroup();
-      const blueJay = friends.create(560, 238, 'friendBlueJay').setData('id', 'tiko');
-      blueJay.setData('title','Tiko the Blue Jay');
-      blueJay.setData('text','Find three flute pieces across the canopy. Reward: double jump.');
-
-      const frog = friends.create(900, 368, 'friendFrog').setData('id', 'mossy');
-      frog.setData('title','Mossy the Frog');
-      frog.setData('text','Cross the wobbly lily pads without falling in.');
-
-      const fox = friends.create(380, 270, 'friendFox').setData('id', 'amber');
-      fox.setData('title','Amber the Fox');
-      fox.setData('text','Help Amber gather berries for the garden. Collect three berries.');
-
-      const crab = friends.create(180, 488, 'friendCrab').setData('id', 'pinch');
-      crab.setData('title','Pinch the Crab');
-      crab.setData('text','Hop across river rocks to reach Pinch\'s shell.');
-
-      this.physics.add.overlap(player, friends, (pl, fr) => {
-        if (Phaser.Input.Keyboard.JustDown(keyE)) startFriendChallenge.call(this, fr);
-        else showFloatingText(this, fr.x, fr.y-34, 'Press E to help');
-      });
-
-      // Challenge groups
-      collectibles = this.physics.add.group();
-      movingPads = this.physics.add.group({ allowGravity:false, immovable:true });
-      gardenRocks = this.physics.add.group({ allowGravity:false, immovable:true });
-
-      // Jump handling with double jump + coyote time + buffer
-      this.input.keyboard.on('keydown-SPACE', () => { jumpPressedTime = this.time.now; tryJump.call(this); });
-    }
-
-    function tryJump(){
-      const onGround = player.body.blocked.down;
-      if(onGround) lastOnGroundTime = this.time.now;
-
-      // Allow jump if on ground, or within coyote window, or buffered shortly before landing
-      const canGroundJump = onGround || (this.time.now - lastOnGroundTime) < COYOTE_MS;
-      const buffered = (this.time.now - jumpPressedTime) < BUFFER_MS;
-
-      if(canGroundJump && buffered){ player.setVelocityY(-520); jumps = 1; return; }
-      if(!onGround && canDoubleJump && jumps < 2 && buffered){ player.setVelocityY(-460); jumps++; return; }
-    }
-
-    function update(){
-      const left = cursors.left.isDown || this.input.keyboard.addKey('A').isDown;
-      const right = cursors.right.isDown || this.input.keyboard.addKey('D').isDown;
-      const onFloor = player.body.blocked.down;
-
-      if(left) player.setVelocityX(-225);
-      else if(right) player.setVelocityX(225);
-      else player.setVelocityX(0);
-
-      if(onFloor){ jumps = 0; lastOnGroundTime = this.time.now; }
-
-      // Move pads (pond)
-      movingPads.children.iterate(p => {
-        if(!p) return;
-        p.x += p.getData('dx') || 0;
-        if(p.x < p.getData('minX') || p.x > p.getData('maxX')) p.setData('dx', -(p.getData('dx')));
-      });
-
-      // Gentle rock bob for the crab path
-      gardenRocks.children.iterate(r => { if(!r) return; r.y += Math.sin(performance.now()/400 + r.x)*0.05; });
-    }
-
-    // Utility: fading helper text
-    function showFloatingText(scene, x, y, text){
-      const t = scene.add.text(x, y, text, { fontFamily:'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif', fontSize:12, color:'#ffffff' }).setOrigin(.5,1);
-      scene.tweens.add({ targets:t, y: y-16, alpha:0, duration:800, onComplete: () => t.destroy() });
-    }
-
-    // Friend router
-    function startFriendChallenge(friend){
-      const id = friend.getData('id');
-      if(id === 'tiko') startCollectChallenge.call(this, friend);
-      if(id === 'mossy') startLilyPadChallenge.call(this, friend);
-      if(id === 'amber') startBerryChallenge.call(this, friend);
-      if(id === 'pinch') startCrabRocksChallenge.call(this, friend);
-    }
-
-    // Tiko: collect 3 items in canopy
-    function startCollectChallenge(friend){
-      showOverlay(friend.getData('title'), friend.getData('text'), () => {
-        collectibles.clear(true, true); movingPads.clear(true, true); gardenRocks.clear(true, true);
-        const spots = [ [560, 238-44], [380, 300-44], [220, 330-44] ];
-        spots.forEach(([x,y]) => { const it = collectibles.create(x, y, 'collect'); it.body.setAllowGravity(false); it.setData('type','flute'); });
-        const pickup = (pl, it) => {
-          it.destroy(); const left = collectibles.countActive(); showFloatingText(this, it.x, it.y-10, left+" left");
-          if(left === 0){ this.physics.world.removeCollider(collider); addBadge('Tiko – Music Buddy'); canDoubleJump = true;
-            showOverlay('Tiko is your friend!', 'You found all the flute pieces. Double jump is now unlocked!', null); }
-        };
-        const collider = this.physics.add.overlap(player, collectibles, pickup, null, this);
-      });
-    }
-
-    // Mossy: moving lily pads across pond
-    function startLilyPadChallenge(friend){
-      showOverlay(friend.getData('title'), friend.getData('text'), () => {
-        collectibles.clear(true, true); movingPads.clear(true, true); gardenRocks.clear(true, true);
-        const pads = [ [700, 500, 640, 760], [820, 480, 760, 880], [940, 460, 900, 990], [1060, 440, 1020, 1100] ];
-        pads.forEach(([x,y,minX,maxX], i) => { const p = movingPads.create(x, y, 'lilypad').setImmovable(true); p.setData('dx', i % 2 === 0 ? -1.05 : 1.05); p.setData('minX', minX); p.setData('maxX', maxX); p.body.setAllowGravity(false); });
-        const goal = this.physics.add.staticImage(1160, 420, 'log');
-        const padCollider = this.physics.add.collider(player, movingPads);
-        const goalOverlap = this.physics.add.overlap(player, goal, () => {
-          this.physics.world.removeCollider(padCollider); this.physics.world.removeCollider(goalOverlap);
-          addBadge('Mossy – Pond Pal'); showOverlay('Mossy is your friend!', 'Lovely jumps. The pond party is on!', null);
-        });
-        // reset if fall
-        this.time.addEvent({ delay: 200, loop: true, callback: () => { if(player.y > 560){ player.setPosition(680, 320); player.setVelocity(0,0); }}});
-        player.setPosition(680, 320);
-      });
-    }
-
-    // Amber the Fox: collect berries on mid platforms
-    function startBerryChallenge(friend){
-      showOverlay(friend.getData('title'), friend.getData('text'), () => {
-        collectibles.clear(true, true); movingPads.clear(true, true); gardenRocks.clear(true, true);
-        const berrySpots = [ [330, 475-40], [480, 448-40], [620, 423-40] ];
-        berrySpots.forEach(([x,y]) => { const b = collectibles.create(x, y, 'collect'); b.body.setAllowGravity(false); });
-        const pickup = (pl, it) => {
-          it.destroy(); const left = collectibles.countActive(); showFloatingText(this, it.x, it.y-10, left+" left");
-          if(left === 0){ this.physics.world.removeCollider(col); addBadge('Amber – Garden Helper'); showOverlay('Amber is your friend!', 'Berries gathered. The garden will thrive!', null); }
-        };
-        const col = this.physics.add.overlap(player, collectibles, pickup, null, this);
-        player.setPosition(300, 520);
-      });
-    }
-
-    // Pinch the Crab: hop across bobbing rocks to the shell
-    function startCrabRocksChallenge(friend){
-      showOverlay(friend.getData('title'), friend.getData('text'), () => {
-        collectibles.clear(true, true); movingPads.clear(true, true); gardenRocks.clear(true, true);
-        const rocks = [ [140, 520], [200, 502], [260, 488], [320, 476], [380, 466] ];
-        rocks.forEach(([x,y]) => { const r = gardenRocks.create(x, y, 'rock'); r.body.setAllowGravity(false); r.setImmovable(true); });
-        const shell = this.physics.add.staticImage(430, 452, 'log');
-        const rockCol = this.physics.add.collider(player, gardenRocks);
-        const shellOv = this.physics.add.overlap(player, shell, () => {
-          this.physics.world.removeCollider(rockCol); this.physics.world.removeCollider(shellOv);
-          addBadge('Pinch – River Buddy'); showOverlay('Pinch is your friend!', 'You made it over the rocks to the shiny shell!', null);
-        });
-        this.time.addEvent({ delay: 200, loop: true, callback: () => { if(player.y > 560){ player.setPosition(120, 520); player.setVelocity(0,0); }}});
-        player.setPosition(120, 520);
-      });
-    }
+    new Phaser.Game(config);
   </script>
 </body>
 </html>
