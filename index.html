@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Redwood Friends</title>
   <style>
-    html, body { height: 100%; margin: 0; background:#152217; }
+    html, body { height: 100%; margin: 0; background:#142318; }
     #game { width: 100%; height: 100%; }
     .hud { position: absolute; left: 12px; top: 12px; z-index: 10; color: #fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
     .hud .badge { display:inline-block; margin-right:6px; padding:4px 8px; border-radius:999px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); font-size:12px; }
@@ -75,7 +75,7 @@
       width: 1024,
       height: 576,
       backgroundColor: '#1a3321',
-      physics: { default: 'arcade', arcade: { gravity: { y: 1000 }, debug: false }}, // slightly lighter gravity
+      physics: { default: 'arcade', arcade: { gravity: { y: 980 }, debug: false }}, // tuned gravity
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
       scene: { preload, create, update }
     };
@@ -92,42 +92,74 @@
     let canDoubleJump = false;
     let jumps = 0;
 
+    // Jump assistance ("coyote time" and a short jump buffer)
+    let lastOnGroundTime = 0;
+    let jumpPressedTime = -9999;
+    const COYOTE_MS = 120;
+    const BUFFER_MS = 140;
+
     function preload(){
-      // Texture factory with simple patterning so blocks feel less plain
-      this.makeBlock = (key, w, h, base, accent) => {
-        const g = this.add.graphics();
-        g.fillStyle(base, 1); g.fillRoundedRect(0,0,w,h, 6);
-        g.lineStyle(1, accent, 0.25);
-        // diagonal hatch
+      // Utility to draw and generate textures
+      const drawTex = (key, draw) => { const g = this.add.graphics(); draw(g); g.generateTexture(key); g.destroy(); };
+
+      // Pretty blocks (pink/green/blue) with light hatch
+      const makeBlock = (key, w, h, base, accent) => drawTex(key, g => {
+        g.clear(); g.fillStyle(base,1); g.fillRoundedRect(0,0,w,h,6);
+        g.lineStyle(1, accent, 0.22);
         for(let x=-h; x<w; x+=10){ g.lineBetween(x, h, x+h, 0); }
-        // soft top highlight strip
-        g.fillStyle(accent, 0.25); g.fillRoundedRect(0,0,w,6,6);
-        g.generateTexture(key, w, h); g.destroy();
-      };
+        g.fillStyle(accent, 0.22); g.fillRoundedRect(0,0,w,6,6);
+      });
+      makeBlock('blockPink', 160, 24, 0xF5A3C7, 0xFFFFFF);
+      makeBlock('blockGreen',160, 24, 0x77D09C, 0xFFFFFF);
+      makeBlock('blockBlue', 160, 24, 0x7EC1FF, 0xFFFFFF);
 
-      // Soft decorative textures
-      this.makeBlock('blockPink', 160, 24, 0xF5A3C7, 0xFFFFFF);
-      this.makeBlock('blockGreen',160, 24, 0x77D09C, 0xFFFFFF);
-      this.makeBlock('blockBlue', 160, 24, 0x7EC1FF, 0xFFFFFF);
+      // Moss strip, water, log, rock
+      drawTex('moss', g => { g.fillStyle(0x2c6c44,1); g.fillRoundedRect(0,0,160,10,6); });
+      drawTex('water', g => { g.fillStyle(0x205a7a,1); g.fillRect(0,0,1024,60); });
+      drawTex('log', g => { g.fillStyle(0x7b4a2b,1); g.fillRoundedRect(0,0,120,22,6); });
+      drawTex('rock', g => { g.fillStyle(0x7f8b9b,1); g.fillRoundedRect(0,0,70,18,6); });
+      drawTex('mushroom', g => { g.fillStyle(0xb43a53,1); g.fillEllipse(0+22,0+12,44,20); g.fillStyle(0xf2eada,1); g.fillRoundedRect(10,18,24,10,4); });
 
-      // Moss top strip for tree platforms
-      const m = this.add.graphics(); m.fillStyle(0x2c6c44,1); m.fillRoundedRect(0,0,160,10,6); m.generateTexture('moss',160,10); m.destroy();
+      // Player
+      drawTex('player', g => { g.fillStyle(0xF6C8C8,1); g.fillRoundedRect(0,0,28,34,8); g.lineStyle(2,0xffffff,0.2); g.strokeRoundedRect(1,1,26,32,8); });
+      drawTex('collect', g => { g.fillStyle(0xFFD05A,1); g.fillCircle(8,8,8); });
 
-      // Player and items
-      const p = this.add.graphics(); p.fillStyle(0xF6C8C8,1); p.fillRoundedRect(0,0,28,34,8); p.generateTexture('player',28,34); p.destroy();
-      const c = this.add.graphics(); c.fillStyle(0xFFD05A,1); c.fillCircle(8,8,8); c.generateTexture('collect',16,16); c.destroy();
+      // Friends with more natural shapes (procedural "illustrated" look)
+      // Blue Jay (body + crest + beak + wing)
+      drawTex('friendBlueJay', g => {
+        g.fillStyle(0x2c79ff,1); g.fillEllipse(26,20,36,28); // body
+        g.fillStyle(0x1a59c8,1); g.........................................illTriangle(40,18, 52,20, 40,22); // beak
+        g.fillStyle(0x9dd0ff,1); g.fillEllipse(22,22,18,12); // wing
+        g.fillStyle(0xffffff,1); g.fillCircle(20,16,3); g.fillStyle(0x000000,1); g.fillCircle(20,16,1.5);
+      });
+      // Frog (body + eyes)
+      drawTex('friendFrog', g => {
+        g.fillStyle(0x49c06a,1); g.fillEllipse(24,22,40,24); // body
+        g.fillStyle(0x3aa65a,1); g.fillEllipse(24,28,30,12); // belly shade
+        g.fillStyle(0xffffff,1); g.fillCircle(14,14,4); g.fillCircle(34,14,4);
+        g.fillStyle(0x000000,1); g.fillCircle(14,14,2); g.fillCircle(34,14,2);
+      });
+      // Fox (body + ears + tail + face)
+      drawTex('friendFox', g => {
+        g.fillStyle(0xf08c2e,1); g.fillEllipse(26,22,36,26); // body
+        g.fillTriangle(16,6, 22,2, 20,12); g.fillTriangle(30,6, 36,2, 32,12); // ears
+        g.fillStyle(0xffd7b3,1); g.fillEllipse(26,24,20,16); // face/cheeks
+        g.fillStyle(0xf08c2e,1); g.fillEllipse(44,26,18,12); // tail
+        g.fillStyle(0xffffff,1); g.fillEllipse(48,26,10,8); // tail tip
+        g.fillStyle(0x000000,1); g.fillCircle(22,20,1.5); g.fillCircle(30,20,1.5);
+      });
+      // Crab (body + claws + legs)
+      drawTex('friendCrab', g => {
+        g.fillStyle(0xee4455,1); g.fillEllipse(26,24,34,18); // body
+        g.fillStyle(0xee4455,1); g.fillTriangle(10,18, 2,10, 6,22); g.fillTriangle(42,18, 50,10, 46,22); // claws
+        g.lineStyle(2,0xee4455,1);
+        for(let i=0;i<3;i++){ g.lineBetween(14+i*6,32, 12+i*6,38); g.lineBetween(28+i*6,32, 26+i*6,38); }
+        g.fillStyle(0xffffff,1); g.fillCircle(18,16,2.5); g.fillCircle(34,16,2.5);
+        g.fillStyle(0x000000,1); g.fillCircle(18,16,1); g.fillCircle(34,16,1);
+      });
 
-      // Friends
-      const f1 = this.add.graphics(); f1.fillStyle(0x3aa7ff,1); f1.fillRoundedRect(0,0,30,30,8); f1.generateTexture('friendBlue',30,30); f1.destroy();
-      const f2 = this.add.graphics(); f2.fillStyle(0x46e07c,1); f2.fillRoundedRect(0,0,30,30,8); f2.generateTexture('friendGreen',30,30); f2.destroy();
-      const f3 = this.add.graphics(); f3.fillStyle(0xF08C2E,1); f3.fillRoundedRect(0,0,30,30,8); f3.generateTexture('friendFox',30,30); f3.destroy();
-      const f4 = this.add.graphics(); f4.fillStyle(0xEE4455,1); f4.fillRoundedRect(0,0,30,30,8); f4.generateTexture('friendCrab',30,30); f4.destroy();
-
-      // Lilypad / water / log / rock
-      const lp = this.add.graphics(); lp.fillStyle(0x60c08a,1); lp.fillRoundedRect(0,0,110,20,10); lp.generateTexture('lilypad',110,20); lp.destroy();
-      const w = this.add.graphics(); w.fillStyle(0x205a7a,1); w.fillRect(0,0,1024,60); w.generateTexture('water',1024,60); w.destroy();
-      const log = this.add.graphics(); log.fillStyle(0x7b4a2b,1); log.fillRoundedRect(0,0,120,22,6); log.generateTexture('log',120,22); log.destroy();
-      const rock = this.add.graphics(); rock.fillStyle(0x7f8b9b,1); rock.fillRoundedRect(0,0,70,18,6); rock.generateTexture('rock',70,18); rock.destroy();
+      // Lilypad
+      drawTex('lilypad', g => { g.fillStyle(0x60c08a,1); g.fillRoundedRect(0,0,110,20,10); g.lineStyle(2,0x3f8c66,0.6); g.strokeRoundedRect(1,1,108,18,10); });
     }
 
     function makeTreeBackground(scene){
@@ -150,27 +182,30 @@
     function create(){
       makeTreeBackground(this);
 
-      // Static platforms (lower first step to fix the early jump)
+      // Static platforms (revised: easier first climb + reachable second level)
       platforms = this.physics.add.staticGroup();
       // ground
-      const groundPink = platforms.create(512, 560, 'blockPink').setScale(6.4, 1.2).refreshBody();
+      platforms.create(512, 560, 'blockPink').setScale(6.4, 1.2).refreshBody();
       this.add.image(512, 534, 'moss').setScale(6.4,1);
 
-      // starter steps (easier)
+      // step-up path to canopy (lowered by ~20px overall)
       const layout = [
-        {x: 180, y: 500, key:'blockGreen'},
-        {x: 330, y: 470, key:'blockBlue'},
-        {x: 480, y: 445, key:'blockPink'},
-        {x: 620, y: 420, key:'blockGreen'},
-        {x: 780, y: 395, key:'blockBlue'},
-        // upper canopy for Tiko
-        {x: 220, y: 320, key:'blockPink'},
-        {x: 380, y: 290, key:'blockGreen'},
-        {x: 560, y: 260, key:'blockBlue'}
+        {x: 180, y: 505, key:'blockGreen'},
+        {x: 330, y: 475, key:'blockBlue'},
+        {x: 480, y: 448, key:'blockPink'},
+        {x: 620, y: 423, key:'blockGreen'},
+        {x: 780, y: 398, key:'blockBlue'},
+        // canopy row now slightly lower to guarantee reach
+        {x: 220, y: 330, key:'blockPink'},
+        {x: 380, y: 300, key:'blockGreen'},
+        {x: 560, y: 270, key:'blockBlue'}
       ];
       layout.forEach(p => platforms.create(p.x, p.y, p.key).refreshBody());
 
-      // Water areas
+      // helper mushroom spring near the tricky step (press jump on it to boost)
+      const mushroom = this.physics.add.staticImage(445, 500, 'mushroom');
+
+      // ponds
       this.add.image(770, 540, 'water').setOrigin(.5,1);
       this.add.image(220, 540, 'water').setOrigin(.5,1);
 
@@ -180,32 +215,39 @@
       player.body.setSize(20, 30).setOffset(4,4);
       this.physics.add.collider(player, platforms);
 
+      // Mushroom bounce
+      this.physics.add.overlap(player, mushroom, () => {
+        if(Phaser.Input.Keyboard.DownDuration(this.input.keyboard.addKey('SPACE'), 200)){
+          player.setVelocityY(-560); // strong pop
+        }
+      });
+
       // Controls
       cursors = this.input.keyboard.createCursorKeys();
       keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
       this.input.keyboard.addKeys('W,A,S,D');
 
-      // Friends
+      // Friends (now with illustrated sprites)
       friends = this.physics.add.staticGroup();
-      const blueJay = friends.create(560, 228, 'friendBlue').setData('id', 'tiko');
+      const blueJay = friends.create(560, 238, 'friendBlueJay').setData('id', 'tiko');
       blueJay.setData('title','Tiko the Blue Jay');
       blueJay.setData('text','Find three flute pieces across the canopy. Reward: double jump.');
 
-      const frog = friends.create(900, 368, 'friendGreen').setData('id', 'mossy');
+      const frog = friends.create(900, 368, 'friendFrog').setData('id', 'mossy');
       frog.setData('title','Mossy the Frog');
       frog.setData('text','Cross the wobbly lily pads without falling in.');
 
-      const fox = friends.create(380, 260, 'friendFox').setData('id', 'amber');
+      const fox = friends.create(380, 270, 'friendFox').setData('id', 'amber');
       fox.setData('title','Amber the Fox');
       fox.setData('text','Help Amber gather berries for the garden. Collect three berries.');
 
-      const crab = friends.create(180, 480, 'friendCrab').setData('id', 'pinch');
+      const crab = friends.create(180, 488, 'friendCrab').setData('id', 'pinch');
       crab.setData('title','Pinch the Crab');
       crab.setData('text','Hop across river rocks to reach Pinch\'s shell.');
 
       this.physics.add.overlap(player, friends, (pl, fr) => {
         if (Phaser.Input.Keyboard.JustDown(keyE)) startFriendChallenge.call(this, fr);
-        else showFloatingText(this, fr.x, fr.y-28, 'Press E to help');
+        else showFloatingText(this, fr.x, fr.y-34, 'Press E to help');
       });
 
       // Challenge groups
@@ -213,12 +255,20 @@
       movingPads = this.physics.add.group({ allowGravity:false, immovable:true });
       gardenRocks = this.physics.add.group({ allowGravity:false, immovable:true });
 
-      // Jump handling with optional double jump
-      this.input.keyboard.on('keydown-SPACE', () => {
-        const onFloor = player.body.blocked.down;
-        if (onFloor) { player.setVelocityY(-500); jumps = 1; }
-        else if (canDoubleJump && jumps < 2) { player.setVelocityY(-440); jumps++; }
-      });
+      // Jump handling with double jump + coyote time + buffer
+      this.input.keyboard.on('keydown-SPACE', () => { jumpPressedTime = this.time.now; tryJump.call(this); });
+    }
+
+    function tryJump(){
+      const onGround = player.body.blocked.down;
+      if(onGround) lastOnGroundTime = this.time.now;
+
+      // Allow jump if on ground, or within coyote window, or buffered shortly before landing
+      const canGroundJump = onGround || (this.time.now - lastOnGroundTime) < COYOTE_MS;
+      const buffered = (this.time.now - jumpPressedTime) < BUFFER_MS;
+
+      if(canGroundJump && buffered){ player.setVelocityY(-520); jumps = 1; return; }
+      if(!onGround && canDoubleJump && jumps < 2 && buffered){ player.setVelocityY(-460); jumps++; return; }
     }
 
     function update(){
@@ -226,11 +276,11 @@
       const right = cursors.right.isDown || this.input.keyboard.addKey('D').isDown;
       const onFloor = player.body.blocked.down;
 
-      if(left) player.setVelocityX(-220);
-      else if(right) player.setVelocityX(220);
+      if(left) player.setVelocityX(-225);
+      else if(right) player.setVelocityX(225);
       else player.setVelocityX(0);
 
-      if(onFloor) jumps = 0;
+      if(onFloor){ jumps = 0; lastOnGroundTime = this.time.now; }
 
       // Move pads (pond)
       movingPads.children.iterate(p => {
@@ -262,7 +312,7 @@
     function startCollectChallenge(friend){
       showOverlay(friend.getData('title'), friend.getData('text'), () => {
         collectibles.clear(true, true); movingPads.clear(true, true); gardenRocks.clear(true, true);
-        const spots = [ [560, 228-44], [380, 290-44], [220, 320-44] ];
+        const spots = [ [560, 238-44], [380, 300-44], [220, 330-44] ];
         spots.forEach(([x,y]) => { const it = collectibles.create(x, y, 'collect'); it.body.setAllowGravity(false); it.setData('type','flute'); });
         const pickup = (pl, it) => {
           it.destroy(); const left = collectibles.countActive(); showFloatingText(this, it.x, it.y-10, left+" left");
@@ -278,7 +328,7 @@
       showOverlay(friend.getData('title'), friend.getData('text'), () => {
         collectibles.clear(true, true); movingPads.clear(true, true); gardenRocks.clear(true, true);
         const pads = [ [700, 500, 640, 760], [820, 480, 760, 880], [940, 460, 900, 990], [1060, 440, 1020, 1100] ];
-        pads.forEach(([x,y,minX,maxX], i) => { const p = movingPads.create(x, y, 'lilypad').setImmovable(true); p.setData('dx', i % 2 === 0 ? -1.1 : 1.1); p.setData('minX', minX); p.setData('maxX', maxX); p.body.setAllowGravity(false); });
+        pads.forEach(([x,y,minX,maxX], i) => { const p = movingPads.create(x, y, 'lilypad').setImmovable(true); p.setData('dx', i % 2 === 0 ? -1.05 : 1.05); p.setData('minX', minX); p.setData('maxX', maxX); p.body.setAllowGravity(false); });
         const goal = this.physics.add.staticImage(1160, 420, 'log');
         const padCollider = this.physics.add.collider(player, movingPads);
         const goalOverlap = this.physics.add.overlap(player, goal, () => {
@@ -295,8 +345,8 @@
     function startBerryChallenge(friend){
       showOverlay(friend.getData('title'), friend.getData('text'), () => {
         collectibles.clear(true, true); movingPads.clear(true, true); gardenRocks.clear(true, true);
-        const berrySpots = [ [330, 470-40], [480, 445-40], [620, 420-40] ];
-        berrySpots.forEach(([x,y]) => { const b = collectibles.create(x, y, 'collect'); b.body.setAllowGravity(false); b.setScale(1); });
+        const berrySpots = [ [330, 475-40], [480, 448-40], [620, 423-40] ];
+        berrySpots.forEach(([x,y]) => { const b = collectibles.create(x, y, 'collect'); b.body.setAllowGravity(false); });
         const pickup = (pl, it) => {
           it.destroy(); const left = collectibles.countActive(); showFloatingText(this, it.x, it.y-10, left+" left");
           if(left === 0){ this.physics.world.removeCollider(col); addBadge('Amber – Garden Helper'); showOverlay('Amber is your friend!', 'Berries gathered. The garden will thrive!', null); }
@@ -310,9 +360,9 @@
     function startCrabRocksChallenge(friend){
       showOverlay(friend.getData('title'), friend.getData('text'), () => {
         collectibles.clear(true, true); movingPads.clear(true, true); gardenRocks.clear(true, true);
-        const rocks = [ [140, 520], [200, 500], [260, 485], [320, 470], [380, 460] ];
+        const rocks = [ [140, 520], [200, 502], [260, 488], [320, 476], [380, 466] ];
         rocks.forEach(([x,y]) => { const r = gardenRocks.create(x, y, 'rock'); r.body.setAllowGravity(false); r.setImmovable(true); });
-        const shell = this.physics.add.staticImage(420, 448, 'log');
+        const shell = this.physics.add.staticImage(430, 452, 'log');
         const rockCol = this.physics.add.collider(player, gardenRocks);
         const shellOv = this.physics.add.overlap(player, shell, () => {
           this.physics.world.removeCollider(rockCol); this.physics.world.removeCollider(shellOv);
